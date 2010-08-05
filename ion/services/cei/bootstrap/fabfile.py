@@ -3,23 +3,23 @@ import os
 import sys
 from fabric.api import env, run, local, put, cd, hide
 
-env.user = os.environ.get('FAB_USER') or "ubuntu"
-try:
-    env.key_filename=os.environ['FAB_KEY']
-except KeyError:
-    print "ERROR. Please run => 'export FAB_KEY=/path/to/ec2/private-keypair-file'"
-    sys.exit(1)
-#env.hosts = [""]
+#env.user = os.environ.get('FAB_USER') or "ubuntu"
+#try:
+#    env.key_filename=os.environ['FAB_KEY']
+#except KeyError:
+#    print "ERROR. Please run => 'export FAB_KEY=/path/to/ec2/private-keypair-file'"
+#    sys.exit(1)
 
-def bootstrap():
+
+def bootstrap(rolesfile=None):
     update()
     install_chef()
-    put_chef_data()
+    put_chef_data(rolesfile=rolesfile)
     run_chef_solo()
 
-def bootstrap_cei():
+def bootstrap_cei(rolesfile=None):
     put_provisioner_secrets()
-    bootstrap()
+    bootstrap(rolesfile=rolesfile)
 
 def put_provisioner_secrets():
     nimbus_key = os.environ.get('NIMBUS_KEY')
@@ -35,9 +35,12 @@ def put_provisioner_secrets():
         sys.exit(1)
 
     run("sudo sh -c 'echo export NIMBUS_KEY=%s >> /opt/cei_environment'" % nimbus_key)
-    run("sudo sh -c 'echo export NIMBUS_SECRET=%s >> /opt/cei_environment'" % nimbus_secret)
     run("sudo sh -c 'echo export AWS_ACCESS_KEY_ID=%s >> /opt/cei_environment'" % ec2_key)
-    run("sudo sh -c 'echo export AWS_SECRET_ACCESS_KEY=%s >> /opt/cei_environment'" % ec2_secret)
+    
+    with hide('running'):
+        run("sudo sh -c 'echo export NIMBUS_SECRET=%s >> /opt/cei_environment'" % nimbus_secret)
+        run("sudo sh -c 'echo export AWS_SECRET_ACCESS_KEY=%s >> /opt/cei_environment'" % ec2_secret)
+    
 
 def update():
     with hide('stdout'):
@@ -49,14 +52,18 @@ def install_chef():
     run("sudo ln -s /var/lib/gems/1.8/bin/chef-solo /usr/local/bin/")
     run("sudo ln -s /var/lib/gems/1.8/bin/ohai /usr/local/bin/")
 
-def put_chef_data():
+def put_chef_data(rolesfile=None):
     run("sudo mkdir /opt/chef && sudo chown ubuntu:ubuntu /opt/chef")
     # checkout the latest cookbooks:
     run("sudo apt-get install -y git-core")
     run("git clone http://github.com/clemesha-ooi/ooi-cookbooks.git /opt/chef/cookbooks")
     # put the role and config files:
     put("chefconf.rb", "/opt/chef/")
-    put("chefroles.json", "/opt/chef/")
+    if rolesfile:
+        put(rolesfile, "/opt/chef/chefroles.json")
+    else:
+        put("chefroles.json", "/opt/chef/")
+        
 
 def run_chef_solo():
     run("sudo chef-solo -l debug -c /opt/chef/chefconf.rb -j /opt/chef/chefroles.json")
