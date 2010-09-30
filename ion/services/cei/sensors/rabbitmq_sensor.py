@@ -1,4 +1,5 @@
 import logging
+from socket import gethostname
 
 from ion.services.cei.sensors.sensor import SensorProcess
 
@@ -26,19 +27,24 @@ class RabbitMQSensor(SensorProcess):
             cookiefile = open(os.path.expanduser("~/.erlang.cookie"))
             erlang_cookie = cookiefile.read().strip()
             cookiefile.close()
-        rabbitmq_node = self.spawn_args.get("rabbitmq_node", "rabbit@localhost") 
-
-        self.sensor_client = self._create_sensor_client(erlang_cookie, rabbitmq_node)
+        
+        remote_node = self.spawn_args.get("rabbitmq_node", "rabbit@localhost") 
+        local_node = gethostname()
+        
+        self.sensor_client = self._create_sensor_client(erlang_cookie, local_node, remote_node)
+        
         self.sensor_loop = LoopingCall(self.messages_in_queue)
         if self.start_immediately:
             self.sensor_loop.start(self.sensor_interval)
 
-    def _create_sensor_client(self, erlang_cookie, rabbitmq_node):
+    def _create_sensor_client(self, erlang_cookie, local_node, remote_node):
         from txrabbitmq.service import RabbitMQControlService
         from twotp.node import Process, buildNodeName
-        nodeName = buildNodeName(rabbitmq_node)
+        logging.debug("RMQ client, remote_node: %s" % remote_node)
+        logging.debug("RMQ client, local_node: %s" % local_node)
+        nodeName = buildNodeName(local_node)
         process = Process(nodeName, erlang_cookie)
-        return RabbitMQControlService(process, nodeName)
+        return RabbitMQControlService(process, remote_node)
 
     @inlineCallbacks
     def op_stop(self, content, headers, msg):
