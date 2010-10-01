@@ -36,8 +36,6 @@ class EPUWorkProducer(BaseService):
                 
                 yield self.send(self.queue_name_work, 'work', {"work_amount":job.length, "batchid":job.batchid, "jobid":job.jobid})
                 
-                self.queue_length += 1
-                
                 extradict = {"batchid":job.batchid, 
                              "jobid":job.jobid,
                              "work_amount":job.length}
@@ -87,5 +85,6 @@ class Sidechannel(resource.Resource):
         for job in sleepjobs:
             self.queue.put(job)
         
-        logging.debug("enqueued %d jobs with %d sleep seconds" % (jobnum, secperjob))
-        return "<html>Success.</html>\n"
+        msg = "batchid '%s': enqueued %d jobs with %d sleep seconds" % (batchid, jobnum, secperjob)
+        logging.debug(msg)
+        return "%s\n" % msg
